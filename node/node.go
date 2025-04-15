@@ -490,28 +490,21 @@ func (n *Node) Commit(key string, version uint64) error {
 	return n.commitAndSend(key, version)
 }
 
-// Read returns values from the store. If the store returns ErrDirtyItem, ask
-// the tail for the latest committed version for this key. That ensures that
-// every node in the chain returns the same version.
+// Read forwards all read requests to the tail node to ensure strong consistency.
 func (n *Node) Read(key string) (string, []byte, error) {
+	if !n.IsTail {
+		// Forward the read request to the tail node.
+		tail := n.neighbors[transport.NeighborPosTail]
+		return tail.rpc.Read(key)
+	}
+
+	// If this is the tail node, fetch the value from the store.
 	item, err := n.store.Read(key)
-
-	switch err {
-	case store.ErrNotFound:
-		return "", nil, errors.New("key doesn't exist")
-	case store.ErrDirtyItem:
-		_, v, err := n.neighbors[transport.NeighborPosTail].rpc.LatestVersion(key)
-		if err != nil {
-			n.log.Printf(
-				"Failed to get latest version of %s from the tail. %v\n",
-				key,
-				err,
-			)
-			return "", nil, err
-		}
-
-		item, err = n.store.ReadVersion(key, v)
-		if err != nil {
+	if err != nil {
+		switch err {
+		case store.ErrNotFound:
+			return "", nil, errors.New("key doesn't exist")
+		default:
 			return "", nil, err
 		}
 	}

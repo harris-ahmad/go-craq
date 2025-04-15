@@ -32,6 +32,15 @@ func (c *CoordinatorBinding) Write(args *ClientWriteArgs, r *EmptyReply) error {
 	return c.Svc.Write(args.Key, args.Value)
 }
 
+func (c *CoordinatorBinding) GetTailAddress(_ *EmptyArgs, reply *string) error {
+	address, err := c.Svc.GetTailAddress()
+	if err != nil {
+		return err
+	}
+	*reply = address
+	return nil
+}
+
 // CoordinatorClient is for invoking net/rpc methods on a Coordinator.
 type CoordinatorClient struct {
 	*Client
@@ -50,4 +59,10 @@ func (cc *CoordinatorClient) RemoveNode(addr string) error {
 func (cc *CoordinatorClient) Write(k string, v []byte) error {
 	args := ClientWriteArgs{Key: k, Value: v}
 	return cc.Client.rpc.Call("RPC.Write", &args, &EmptyReply{})
+}
+
+func (cc *CoordinatorClient) GetTailAddress() (string, error) {
+	var reply string
+	err := cc.Client.rpc.Call("RPC.GetTailAddress", &EmptyArgs{}, &reply)
+	return reply, err
 }

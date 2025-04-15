@@ -21,6 +21,7 @@ type CoordinatorService interface {
 	AddNode(address string) (*NodeMeta, error)
 	Write(key string, value []byte) error
 	RemoveNode(address string) error
+	GetTailAddress() (string, error)
 }
 
 // NodeService is the API provided by a Node.

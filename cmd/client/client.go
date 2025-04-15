@@ -9,10 +9,9 @@ import (
 )
 
 func main() {
-	var cdr, node string
+	var cdr string
 
 	flag.StringVar(&cdr, "c", ":1234", "coordinator address")
-	flag.StringVar(&node, "n", ":1235", "node address to read from")
 	flag.Parse()
 
 	args := flag.Args()
@@ -24,10 +23,20 @@ func main() {
 	cmd := args[0]
 
 	if cmd == "readall" {
-		n := netrpc.NewNodeClient()
+		// Connect to the coordinator to get the tail node's address
+		c := netrpc.NewCoordinatorClient()
+		if err := c.Connect(cdr); err != nil {
+			log.Fatalf("Failed to connect to coordinator\n  %#v", err)
+		}
 
-		if err := n.Connect(node); err != nil {
-			log.Fatalf("Failed to connect to node\n  %#v", err)
+		tailAddress, err := c.GetTailAddress()
+		if err != nil {
+			log.Fatalf("Failed to get tail node address\n  %#v", err)
+		}
+
+		n := netrpc.NewNodeClient()
+		if err := n.Connect(tailAddress); err != nil {
+			log.Fatalf("Failed to connect to tail node\n  %#v", err)
 		}
 
 		items, err := n.ReadAll()
@@ -55,13 +64,25 @@ func main() {
 		}
 		val := strings.Join(args[2:], " ")
 		c := netrpc.NewCoordinatorClient()
-		c.Connect(cdr)
+		if err := c.Connect(cdr); err != nil {
+			log.Fatalf("Failed to connect to coordinator\n  %#v", err)
+		}
 		log.Println(c.Write(key, []byte(val)))
 	case "read":
-		n := netrpc.NewNodeClient()
+		// Connect to the coordinator to get the tail node's address
+		c := netrpc.NewCoordinatorClient()
+		if err := c.Connect(cdr); err != nil {
+			log.Fatalf("Failed to connect to coordinator\n  %#v", err)
+		}
 
-		if err := n.Connect(node); err != nil {
-			log.Fatalf("Failed to connect to node\n  %#v", err)
+		tailAddress, err := c.GetTailAddress()
+		if err != nil {
+			log.Fatalf("Failed to get tail node address\n  %#v", err)
+		}
+
+		n := netrpc.NewNodeClient()
+		if err := n.Connect(tailAddress); err != nil {
+			log.Fatalf("Failed to connect to tail node\n  %#v", err)
 		}
 
 		k, v, err := n.Read(key)

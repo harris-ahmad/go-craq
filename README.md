@@ -142,7 +142,6 @@ changes.
 Coordinator uses to send writes to the head node. This is where the chain begins
 the process of propagation.
 
-## Q/A
 ### What happens during a write?
 A write request containing the key and value are sent to the Coordinator via the
 Coordinator's `Write` RPC method. If the chain is not empty, the Coordinator
@@ -164,6 +163,9 @@ tail sends a `Commit` RPC method to it's predecessor. The tail's predecessor
 commits that version of the item, then continues to forward the `Commit` message
 backwards through the chain, one node at a time, until every node has committed
 the version.
+
+### What happens during a read?
+A read request is always forwarded to the tail node to ensure strong consistency. The tail node responds with the latest committed version of the requested key. Intermediate nodes no longer serve read requests directly.
 
 ### What happens when a new node joins the chain?
 When the `node.Start` method is run, the Node will backfill it's list of latest

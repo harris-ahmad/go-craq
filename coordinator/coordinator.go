@@ -230,3 +230,14 @@ func (cdr *Coordinator) Write(key string, value []byte) error {
 	head := cdr.replicas[0]
 	return head.rpc.ClientWrite(key, value)
 }
+
+// GetTailAddress returns the address of the tail node.
+func (cdr *Coordinator) GetTailAddress() (string, error) {
+	cdr.mu.Lock()
+	defer cdr.mu.Unlock()
+
+	if cdr.tail == nil {
+		return "", errors.New("no tail node available")
+	}
+	return cdr.tail.Address(), nil
+}
