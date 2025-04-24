@@ -341,6 +341,32 @@ func (cdr *Coordinator) Write(key string, value []byte) error {
 // This is useful for clients that need to send read requests directly to the tail
 // in vanilla chain replication.
 func (cdr *Coordinator) GetTailAddress() (string, error) {
+	// First, check if we're in tail recovery mode
+	cdr.tailRecoveryMu.RLock()
+	inTailRecovery := cdr.tailRecovery
+	cdr.tailRecoveryMu.RUnlock()
+
+	if inTailRecovery {
+		// If we're in tail recovery mode, check how much time is left in the recovery period
+		cdr.chainMu.RLock()
+		failureTime := cdr.failureDetectedAt
+		cdr.chainMu.RUnlock()
+
+		timeElapsed := time.Since(failureTime)
+		timeLeft := cdr.stabilizeTimeout - timeElapsed
+
+		if timeLeft > 0 {
+			log.Printf("[CHAIN-HEALTH] Read operation hanging for %v due to tail node recovery",
+				timeLeft.Round(time.Millisecond))
+
+			// Make read operations hang during tail recovery, just like writes
+			time.Sleep(timeLeft)
+
+			log.Printf("[CHAIN-HEALTH] Resuming read operation after tail node recovery completed")
+		}
+	}
+
+	// Now proceed with getting the tail address
 	cdr.mu.Lock()
 	defer cdr.mu.Unlock()
 
