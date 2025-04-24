@@ -84,8 +84,8 @@ func main() {
 
 	// Workload configuration
 	var writePercentage, readPercentage int
-	flag.IntVar(&writePercentage, "write", 50, "Percentage of write operations (0-100)")
-	flag.IntVar(&readPercentage, "read", 50, "Percentage of read operations (0-100)")
+	flag.IntVar(&writePercentage, "write", 25, "Percentage of write operations (0-50)")
+	flag.IntVar(&readPercentage, "read", 25, "Percentage of read operations (0-50)")
 
 	// Concurrency parameters
 	var numOperations, numConcurrent int
@@ -113,8 +113,8 @@ func main() {
 	flag.Parse()
 
 	// Validate and prepare configuration
-	if writePercentage+readPercentage != 100 {
-		log.Fatal("Error: Write percentage + read percentage must equal 100")
+	if writePercentage+readPercentage != 50 {
+		log.Fatal("Error: Write percentage + read percentage must equal 50")
 	}
 
 	cdrAddr := fmt.Sprintf("%s:%s", cdrHost, cdrPort)
