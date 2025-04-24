@@ -44,6 +44,10 @@ type Coordinator struct {
 	failureDetectedAt time.Time     // when was a node failure last detected
 	stabilizeTimeout  time.Duration // how long to wait before considering chain stable again
 
+	// Specific tracking for tail node failures
+	tailRecoveryMu sync.RWMutex
+	tailRecovery   bool // true when tail is being recovered after failure
+
 	// Configurable timing parameters
 	pingTimeout  time.Duration // How long to wait for a ping response before considering a node failed
 	pingInterval time.Duration // Interval between ping cycles
@@ -167,9 +171,25 @@ func (cdr *Coordinator) RemoveNode(address string) error {
 	log.Printf("removed node %s", address)
 
 	if wasTail {
+		// Specifically mark that we're in tail recovery mode
+		// This will cause both reads and writes to hang
+		cdr.tailRecoveryMu.Lock()
+		cdr.tailRecovery = true
+		log.Printf("[CHAIN-HEALTH] Tail node failed, entering tail recovery mode")
+		cdr.tailRecoveryMu.Unlock()
+
 		cdr.tail = nil
 		if idx > 0 {
 			cdr.tail = cdr.replicas[idx-1]
+
+			// Schedule the end of tail recovery mode after stabilizeTimeout
+			go func() {
+				time.Sleep(cdr.stabilizeTimeout)
+				cdr.tailRecoveryMu.Lock()
+				cdr.tailRecovery = false
+				log.Printf("[CHAIN-HEALTH] New tail node stabilized, exiting tail recovery mode")
+				cdr.tailRecoveryMu.Unlock()
+			}()
 		}
 
 		// Because the tail node changed, all the other nodes need to be updated to
