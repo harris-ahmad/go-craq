@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/rpc"
@@ -11,8 +12,13 @@ import (
 )
 
 func main() {
-	addr := *flag.String("a", ":1234", "Local address to listen on")
+	var host, port string
+	flag.StringVar(&host, "h", "0.0.0.0", "Host to bind to")
+	flag.StringVar(&port, "p", "1234", "Port to bind to")
 	flag.Parse()
+
+	addr := fmt.Sprintf("%s:%s", host, port)
+	log.Printf("Starting coordinator on %s", addr)
 
 	c := coordinator.New(netrpc.NewNodeClient)
 
