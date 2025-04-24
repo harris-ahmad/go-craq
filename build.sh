@@ -8,3 +8,4 @@ go build -o bin/node cmd/node/node.go
 
 # Build the Client
 go build -o bin/client cmd/client/client.go
+
