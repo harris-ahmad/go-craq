@@ -194,14 +194,17 @@ func (n *Node) writePropagated(reply *transport.PropagateResponse) error {
 // Commit the version to the store, update n.latest for this key, and announce
 // the commit to the n.committed channel if there is one.
 func (n *Node) commit(key string, version uint64) error {
+	n.log.Printf("[COMMIT] Marking version %d of key %s as committed\n", version, key)
 	if err := n.store.Commit(key, version); err != nil {
-		n.log.Printf("Failed to commit. Key: %s Version: %d Error: %#v", key, version, err)
+		n.log.Printf("[ERROR] Failed to commit. Key: %s Version: %d Error: %v", key, version, err)
 		return err
 	}
 
 	n.latest[key] = version
+	n.log.Printf("[COMMIT] Updated latest version for key %s to %d\n", key, version)
 
 	if n.committed != nil {
+		n.log.Printf("[COMMIT] Notifying commit channel for key %s version %d\n", key, version)
 		n.committed <- commitEvent{Key: key, Version: version}
 	}
 
@@ -397,29 +400,29 @@ func (n *Node) ClientWrite(key string, val []byte) error {
 		version = old.Version + 1
 	}
 
+	n.log.Printf("[CLIENT-WRITE] Creating version %d of key %s\n", version, key)
+
 	if err := n.store.Write(key, val, version); err != nil {
-		n.log.Printf("Failed to create during ClientWrite. %v\n", err)
+		n.log.Printf("[ERROR] Failed to create during ClientWrite: %v\n", err)
 		return err
 	}
 
-	n.log.Printf("Node RPC ClientWrite() created version %d of key %s\n", version, key)
-
 	// Forward the new object to the successor node.
-
 	next := n.neighbors[transport.NeighborPosNext]
 
 	// If there's no successor, it means this is the only node in the chain, so
 	// mark the item as committed and return early.
 	if next.address == "" {
-		n.log.Println("No successor")
+		n.log.Printf("[CLIENT-WRITE] No successor, this is the only node in chain. Committing locally.\n")
 		if err := n.commit(key, version); err != nil {
 			return err
 		}
 		return nil
 	}
 
+	n.log.Printf("[CLIENT-WRITE] Forwarding write to successor at %s\n", next.address)
 	if err := next.rpc.Write(key, val, version); err != nil {
-		n.log.Printf("Failed to send to successor during ClientWrite. %v\n", err)
+		n.log.Printf("[ERROR] Failed to send to successor during ClientWrite: %v\n", err)
 		return err
 	}
 
@@ -431,10 +434,11 @@ func (n *Node) ClientWrite(key string, val []byte) error {
 // marked committed and a Commit message is sent to the predecessor in the
 // chain.
 func (n *Node) Write(key string, val []byte, version uint64) error {
-	n.log.Printf("Node RPC Write() %s version %d to store\n", key, version)
+	n.log.Printf("[CHAIN-WRITE] Node received write for key %s version %d (IsTail: %t)\n",
+		key, version, n.IsTail)
 
 	if err := n.store.Write(key, val, version); err != nil {
-		n.log.Printf("Failed to write. %v\n", err)
+		n.log.Printf("[ERROR] Failed to write key %s: %v\n", key, err)
 		return err
 	}
 
@@ -442,21 +446,28 @@ func (n *Node) Write(key string, val []byte, version uint64) error {
 	// chain to the next node.
 	if !n.IsTail {
 		next := n.neighbors[transport.NeighborPosNext]
+		n.log.Printf("[CHAIN-WRITE] Forwarding write of key %s to next node %s\n",
+			key, next.address)
+
 		if err := next.rpc.Write(key, val, version); err != nil {
-			n.log.Printf("Failed to send to successor during Write. %v\n", err)
+			n.log.Printf("[ERROR] Failed to send to successor during Write: %v\n", err)
 			return err
 		}
 		return nil
 	}
 
 	// At this point it's assumed this node is the tail.
+	n.log.Printf("[CHAIN-WRITE] This node is tail, committing key %s version %d\n",
+		key, version)
 
 	if err := n.commit(key, version); err != nil {
-		n.log.Printf("Failed to mark as committed in Write. %v\n", err)
+		n.log.Printf("[ERROR] Failed to mark key %s as committed: %v\n", key, err)
 		return err
 	}
 
 	// Start telling predecessors to mark this version committed.
+	n.log.Printf("[CHAIN-COMMIT] Starting commit propagation for key %s version %d\n",
+		key, version)
 	n.sendCommitToPrev(key, version)
 	return nil
 }
@@ -464,15 +475,22 @@ func (n *Node) Write(key string, val []byte, version uint64) error {
 // commitAndSend commits an item to the store and sends a message to the
 // predecessor node to tell it to commit as well.
 func (n *Node) commitAndSend(key string, version uint64) error {
+	n.log.Printf("[CHAIN-COMMIT] Committing key %s version %d locally\n", key, version)
 	if err := n.commit(key, version); err != nil {
+		n.log.Printf("[ERROR] Failed to commit key %s version %d: %v\n", key, version, err)
 		return err
 	}
 
 	// if this node has a predecessor, send commit to previous node
 	if n.neighbors[transport.NeighborPosPrev].address != "" {
+		prevAddress := n.neighbors[transport.NeighborPosPrev].address
+		n.log.Printf("[CHAIN-COMMIT] Propagating commit for key %s version %d to predecessor at %s\n",
+			key, version, prevAddress)
 		return n.sendCommitToPrev(key, version)
 	}
 
+	n.log.Printf("[CHAIN-COMMIT] No predecessor, commit propagation complete for key %s version %d\n",
+		key, version)
 	return nil
 }
 
@@ -487,33 +505,37 @@ func (n *Node) sendCommitToPrev(key string, version uint64) error {
 
 // Commit marks an object as committed in storage.
 func (n *Node) Commit(key string, version uint64) error {
-	return n.commitAndSend(key, version)
+	n.log.Printf("[CHAIN-COMMIT] Received commit request for key %s version %d\n", key, version)
+	err := n.commitAndSend(key, version)
+	if err != nil {
+		n.log.Printf("[ERROR] Failed to commit and propagate key %s version %d: %v\n", key, version, err)
+	} else {
+		n.log.Printf("[CHAIN-COMMIT] Successfully committed key %s version %d\n", key, version)
+	}
+	return err
 }
 
 // Read returns values from the store. If the store returns ErrDirtyItem, ask
 // the tail for the latest committed version for this key. That ensures that
 // every node in the chain returns the same version.
 func (n *Node) Read(key string) (string, []byte, error) {
+	// In vanilla chain replication, only the tail node can serve reads
+	if !n.IsTail {
+		n.log.Printf("WARNING: Read attempt on non-tail node rejected for key %s", key)
+		return "", nil, errors.New("reads only allowed on the tail node")
+	}
+
+	n.log.Printf("Tail node serving read for key: %s", key)
 	item, err := n.store.Read(key)
 
-	switch err {
-	case store.ErrNotFound:
+	if err == store.ErrNotFound {
 		return "", nil, errors.New("key doesn't exist")
-	case store.ErrDirtyItem:
-		_, v, err := n.neighbors[transport.NeighborPosTail].rpc.LatestVersion(key)
-		if err != nil {
-			n.log.Printf(
-				"Failed to get latest version of %s from the tail. %v\n",
-				key,
-				err,
-			)
-			return "", nil, err
-		}
+	}
 
-		item, err = n.store.ReadVersion(key, v)
-		if err != nil {
-			return "", nil, err
-		}
+	// In vanilla chain replication, dirty/clean distinction is removed
+	// We just return the latest version from the store
+	if err != nil {
+		return "", nil, err
 	}
 
 	return key, item.Value, nil
@@ -540,6 +562,8 @@ func (n *Node) ReadAll() (*[]transport.Item, error) {
 // LatestVersion provides the latest committed version for a given key in the
 // store.
 func (n *Node) LatestVersion(key string) (string, uint64, error) {
+	n.log.Printf("WARNING: LatestVersion RPC called but is deprecated in vanilla chain replication")
+	// Return a sensible value for compatibility but log a warning
 	return key, n.latest[key], nil
 }
 

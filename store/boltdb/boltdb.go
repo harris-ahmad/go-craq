@@ -65,10 +65,8 @@ func (b *Bolt) Read(key string) (*store.Item, error) {
 		return nil, err
 	}
 
-	if !items[len(items)-1].Committed {
-		return nil, store.ErrDirtyItem
-	}
-
+	// In vanilla chain replication, we always return the latest version
+	// regardless of commit status - the tail should always have the latest version
 	return items[len(items)-1], nil
 }
 

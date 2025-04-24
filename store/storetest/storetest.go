@@ -4,6 +4,7 @@
 package storetest
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 
@@ -76,8 +77,14 @@ func testReadDirty(t *testing.T, s store.Storer) {
 		t.Fatalf("Write(hello, world, 1) unexpected error\n  got: %#v", err)
 	}
 
-	if _, err := s.Read(itm.Key); err != store.ErrDirtyItem {
+	// In vanilla chain replication, Read always returns the latest version
+	// regardless of commit status
+	got, err := s.Read(itm.Key)
+	if err != nil {
 		t.Fatalf("Read(hello) unexpected error\n  got: %#v", err)
+	}
+	if got.Version != itm.Version || !bytes.Equal(got.Value, itm.Value) {
+		t.Fatalf("Read(hello) unexpected item\n  want: %#v\n  got: %#v", itm, got)
 	}
 }
 

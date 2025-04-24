@@ -35,12 +35,20 @@ type Coordinator struct {
 	// For testing the AddNode method. This WaitGroup is done when updates have
 	// been sent to all nodes.
 	Updates *sync.WaitGroup
+
+	// Chain health tracking
+	chainMu           sync.RWMutex
+	chainStable       bool          // true if chain is stable, false during node failure detection
+	failureDetectedAt time.Time     // when was a node failure last detected
+	stabilizeTimeout  time.Duration // how long to wait before considering chain stable again
 }
 
 func New(t transport.NodeClientFactory) *Coordinator {
 	return &Coordinator{
-		Updates: &sync.WaitGroup{},
-		tport:   t,
+		Updates:          &sync.WaitGroup{},
+		tport:            t,
+		chainStable:      true,
+		stabilizeTimeout: 2 * pingTimeout, // Wait twice the ping timeout before considering the chain stable again
 	}
 }
 
@@ -100,6 +108,22 @@ func (cdr *Coordinator) updateAll() {
 func (cdr *Coordinator) RemoveNode(address string) error {
 	cdr.mu.Lock()
 	defer cdr.mu.Unlock()
+
+	// Mark the chain as unstable when a node fails
+	cdr.chainMu.Lock()
+	cdr.chainStable = false
+	cdr.failureDetectedAt = time.Now()
+	log.Printf("[CHAIN-HEALTH] Chain marked UNSTABLE due to node failure: %s", address)
+	cdr.chainMu.Unlock()
+
+	// Start a goroutine to mark the chain as stable again after stabilizeTimeout
+	go func() {
+		time.Sleep(cdr.stabilizeTimeout)
+		cdr.chainMu.Lock()
+		cdr.chainStable = true
+		log.Printf("[CHAIN-HEALTH] Chain marked STABLE after reorganization period completed")
+		cdr.chainMu.Unlock()
+	}()
 
 	idx, found := findReplicaIndex(address, cdr.replicas)
 	if !found {
@@ -226,7 +250,51 @@ func (cdr *Coordinator) Write(key string, value []byte) error {
 		return ErrEmptyChain
 	}
 
-	// Forward the write to the head
+	// Check chain stability status before proceeding with write
+	cdr.chainMu.RLock()
+	isStable := cdr.chainStable
+	failureTime := cdr.failureDetectedAt
+	cdr.chainMu.RUnlock()
+
+	if !isStable {
+		// Calculate how long to wait before timeout
+		timeElapsed := time.Since(failureTime)
+		timeLeft := cdr.stabilizeTimeout - timeElapsed
+
+		if timeLeft > 0 {
+			log.Printf("[CHAIN-HEALTH] Write for key %s hanging for %v due to ongoing chain reorganization",
+				key, timeLeft.Round(time.Millisecond))
+
+			// Wait until the chain stabilizes
+			time.Sleep(timeLeft)
+
+			log.Printf("[CHAIN-HEALTH] Resuming write for key %s after chain stabilized", key)
+		}
+	}
+
+	// Acquire lock again to ensure we have the current head after waiting
+	cdr.mu.Lock()
+	if len(cdr.replicas) < 1 {
+		cdr.mu.Unlock()
+		return ErrEmptyChain
+	}
 	head := cdr.replicas[0]
+	cdr.mu.Unlock()
+
+	// Forward the write to the head
 	return head.rpc.ClientWrite(key, value)
+}
+
+// GetTailAddress returns the address of the current tail node.
+// This is useful for clients that need to send read requests directly to the tail
+// in vanilla chain replication.
+func (cdr *Coordinator) GetTailAddress() (string, error) {
+	cdr.mu.Lock()
+	defer cdr.mu.Unlock()
+
+	if cdr.tail == nil || len(cdr.replicas) == 0 {
+		return "", ErrEmptyChain
+	}
+
+	return cdr.tail.Address(), nil
 }

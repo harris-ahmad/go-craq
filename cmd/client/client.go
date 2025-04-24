@@ -26,6 +26,23 @@ func main() {
 	if cmd == "readall" {
 		n := netrpc.NewNodeClient()
 
+		// For vanilla chain replication, we need to connect to the tail
+		// Use coordinator to get the tail's address if -n flag wasn't specified with "tail"
+		if !strings.Contains(strings.ToLower(node), "tail") {
+			log.Println("Contacting coordinator to find tail node for read operation...")
+			c := netrpc.NewCoordinatorClient()
+			if err := c.Connect(cdr); err != nil {
+				log.Fatalf("Failed to connect to coordinator\n  %#v", err)
+			}
+
+			tailAddr, err := c.GetTailAddress()
+			if err != nil {
+				log.Fatalf("Failed to get tail address: %v", err)
+			}
+			log.Printf("Using tail node at %s for read operation", tailAddr)
+			node = tailAddr
+		}
+
 		if err := n.Connect(node); err != nil {
 			log.Fatalf("Failed to connect to node\n  %#v", err)
 		}
@@ -59,6 +76,23 @@ func main() {
 		log.Println(c.Write(key, []byte(val)))
 	case "read":
 		n := netrpc.NewNodeClient()
+
+		// For vanilla chain replication, we need to connect to the tail
+		// Use coordinator to get the tail's address if -n flag wasn't specified with "tail"
+		if !strings.Contains(strings.ToLower(node), "tail") {
+			log.Println("Contacting coordinator to find tail node for read operation...")
+			c := netrpc.NewCoordinatorClient()
+			if err := c.Connect(cdr); err != nil {
+				log.Fatalf("Failed to connect to coordinator\n  %#v", err)
+			}
+
+			tailAddr, err := c.GetTailAddress()
+			if err != nil {
+				log.Fatalf("Failed to get tail address: %v", err)
+			}
+			log.Printf("Using tail node at %s for read operation", tailAddr)
+			node = tailAddr
+		}
 
 		if err := n.Connect(node); err != nil {
 			log.Fatalf("Failed to connect to node\n  %#v", err)

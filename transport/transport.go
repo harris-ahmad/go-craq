@@ -21,6 +21,7 @@ type CoordinatorService interface {
 	AddNode(address string) (*NodeMeta, error)
 	Write(key string, value []byte) error
 	RemoveNode(address string) error
+	GetTailAddress() (string, error)
 }
 
 // NodeService is the API provided by a Node.
@@ -29,6 +30,7 @@ type NodeService interface {
 	Update(meta *NodeMeta) error
 	ClientWrite(key string, value []byte) error
 	Write(key string, value []byte, version uint64) error
+	// LatestVersion is deprecated in vanilla chain replication but kept for backward compatibility
 	LatestVersion(key string) (string, uint64, error)
 	FwdPropagate(verByKey *PropagateRequest) (*PropagateResponse, error)
 	BackPropagate(verByKey *PropagateRequest) (*PropagateResponse, error)

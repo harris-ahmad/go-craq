@@ -13,15 +13,16 @@ var (
 	// item exists for the given key.
 	ErrNotFound = errors.New("that key does not exist")
 
-	// ErrDirtyItem should be returned by storage if the latest version for the
-	// key has not been committed yet.
+	// ErrDirtyItem is kept for backward compatibility but is no longer used
+	// in vanilla chain replication as we don't distinguish between committed
+	// and uncommitted versions for reads (only the tail serves reads).
 	ErrDirtyItem = errors.New("key has an uncommitted version")
 )
 
 type Storer interface {
-	// Read an item from the store by key. If there is an uncommitted (dirty)
-	// version of the item in the store, it returns a ErrDirtyItem error. If
-	// no item exists for that key it returns a ErrNotFound error.
+	// Read an item from the store by key. Returns the latest version of the item
+	// regardless of whether it is committed or not. If no item exists for
+	// that key it returns a ErrNotFound error.
 	Read(key string) (*Item, error)
 
 	// Write a new item to the store.
