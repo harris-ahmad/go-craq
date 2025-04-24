@@ -11,9 +11,8 @@ import (
 
 func main() {
 	var cdrHost, cdrPort string
-
-	flag.StringVar(&cdrHost, "ch", "localhost", "Coordinator host")
-	flag.StringVar(&cdrPort, "cp", "8080", "Coordinator port")
+	flag.StringVar(&cdrHost, "ch", "localhost", "Coordinator hostname")
+	flag.StringVar(&cdrPort, "cp", "1234", "Coordinator port")
 	flag.Parse()
 
 	cdrAddr := fmt.Sprintf("%s:%s", cdrHost, cdrPort)
@@ -28,27 +27,21 @@ func main() {
 	cmd := args[0]
 
 	if cmd == "readall" {
-		n := netrpc.NewNodeClient()
-		// For vanilla chain replication, we need to connect to the tail
-		// Use coordinator to get the tail's address if -n flag wasn't specified with "tail"
-		log.Println("Contacting coordinator to find tail node for read operation...")
+		// Connect to the coordinator to get the tail node's address
 		c := netrpc.NewCoordinatorClient()
 		if err := c.Connect(cdrAddr); err != nil {
 			log.Fatalf("Failed to connect to coordinator\n  %#v", err)
 		}
 
-		tailAddr, err := c.GetTailAddress()
+		tailAddress, err := c.GetTailAddress()
 		if err != nil {
-			log.Fatalf("Failed to get tail address: %v", err)
-		}
-		log.Printf("Using tail node at %s for read operation", tailAddr)
-		cdrAddr = tailAddr
-
-		if err := n.Connect(cdrAddr); err != nil {
-			log.Fatalf("Failed to connect to node\n  %#v", err)
+			log.Fatalf("Failed to get tail node address\n  %#v", err)
 		}
 
-		log.Println("Reading all items from the node...")
+		n := netrpc.NewNodeClient()
+		if err := n.Connect(tailAddress); err != nil {
+			log.Fatalf("Failed to connect to tail node\n  %#v", err)
+		}
 
 		items, err := n.ReadAll()
 		if err != nil {
@@ -78,28 +71,22 @@ func main() {
 		if err := c.Connect(cdrAddr); err != nil {
 			log.Fatalf("Failed to connect to coordinator\n  %#v", err)
 		}
-		log.Println("Writing to the node...")
 		log.Println(c.Write(key, []byte(val)))
 	case "read":
-		n := netrpc.NewNodeClient()
-
-		// For vanilla chain replication, we need to connect to the tail
-		// Use coordinator to get the tail's address if -n flag wasn't specified with "tail"
-
-		log.Println("Contacting coordinator to find tail node for read operation...")
+		// Connect to the coordinator to get the tail node's address
 		c := netrpc.NewCoordinatorClient()
 		if err := c.Connect(cdrAddr); err != nil {
 			log.Fatalf("Failed to connect to coordinator\n  %#v", err)
 		}
 
-		tailAddr, err := c.GetTailAddress()
+		tailAddress, err := c.GetTailAddress()
 		if err != nil {
-			log.Fatalf("Failed to get tail address: %v", err)
+			log.Fatalf("Failed to get tail node address\n  %#v", err)
 		}
-		log.Printf("Using tail node at %s for read operation", tailAddr)
 
-		if err := n.Connect(tailAddr); err != nil {
-			log.Fatalf("Failed to connect to node\n  %#v", err)
+		n := netrpc.NewNodeClient()
+		if err := n.Connect(tailAddress); err != nil {
+			log.Fatalf("Failed to connect to tail node\n  %#v", err)
 		}
 
 		k, v, err := n.Read(key)
