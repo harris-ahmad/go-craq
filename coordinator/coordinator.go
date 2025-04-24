@@ -18,9 +18,11 @@ import (
 	"github.com/despreston/go-craq/transport"
 )
 
-const (
-	pingTimeout  = 5 * time.Second
-	pingInterval = 1 * time.Second
+// Default timing values
+var (
+	DefaultPingTimeout    = 5 * time.Second // Default time to wait for a ping response
+	DefaultPingInterval   = 1 * time.Second // Default interval between ping cycles
+	DefaultStabilizeRatio = 2.0             // Default ratio for stabilization timeout (relative to ping timeout)
 )
 
 var ErrEmptyChain = errors.New("no nodes in the chain")
@@ -41,14 +43,44 @@ type Coordinator struct {
 	chainStable       bool          // true if chain is stable, false during node failure detection
 	failureDetectedAt time.Time     // when was a node failure last detected
 	stabilizeTimeout  time.Duration // how long to wait before considering chain stable again
+
+	// Configurable timing parameters
+	pingTimeout  time.Duration // How long to wait for a ping response before considering a node failed
+	pingInterval time.Duration // Interval between ping cycles
+}
+
+// CoordinatorOpts contains configuration options for creating a Coordinator.
+// All fields are optional and will use defaults if not specified.
+type CoordinatorOpts struct {
+	PingTimeout    time.Duration // How long to wait for a node to respond before considering it failed
+	PingInterval   time.Duration // How often to ping nodes
+	StabilizeRatio float64       // Ratio of ping timeout for stabilization period (e.g., 2.0 = 2x pingTimeout)
 }
 
 func New(t transport.NodeClientFactory) *Coordinator {
+	return NewWithOpts(t, CoordinatorOpts{})
+}
+
+// NewWithOpts creates a new Coordinator with custom configuration options.
+func NewWithOpts(t transport.NodeClientFactory, opts CoordinatorOpts) *Coordinator {
+	// Use defaults for any unspecified options
+	if opts.PingTimeout <= 0 {
+		opts.PingTimeout = DefaultPingTimeout
+	}
+	if opts.PingInterval <= 0 {
+		opts.PingInterval = DefaultPingInterval
+	}
+	if opts.StabilizeRatio <= 0 {
+		opts.StabilizeRatio = DefaultStabilizeRatio
+	}
+
 	return &Coordinator{
 		Updates:          &sync.WaitGroup{},
 		tport:            t,
 		chainStable:      true,
-		stabilizeTimeout: 2 * pingTimeout, // Wait twice the ping timeout before considering the chain stable again
+		pingTimeout:      opts.PingTimeout,
+		pingInterval:     opts.PingInterval,
+		stabilizeTimeout: time.Duration(float64(opts.PingTimeout) * opts.StabilizeRatio),
 	}
 }
 
@@ -75,12 +107,12 @@ func (cdr *Coordinator) pingReplicas() {
 					if !ok {
 						cdr.RemoveNode(n.Address())
 					}
-				case <-time.After(pingTimeout):
+				case <-time.After(cdr.pingTimeout):
 					cdr.RemoveNode(n.Address())
 				}
 			}(n)
 		}
-		time.Sleep(pingInterval)
+		time.Sleep(cdr.pingInterval)
 	}
 }
 
