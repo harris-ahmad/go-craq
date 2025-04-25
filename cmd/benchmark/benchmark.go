@@ -90,7 +90,7 @@ func main() {
 	// Concurrency parameters
 	var numOperations, numConcurrent int
 	flag.IntVar(&numOperations, "n", 1000, "Total number of operations to perform")
-	flag.IntVar(&numConcurrent, "c", 10, "Number of concurrent clients")
+	flag.IntVar(&numConcurrent, "c", 1, "Number of concurrent clients")
 	
 	// Timing parameters
 	var thinkTimeMs, timeoutMs, durationSec int
