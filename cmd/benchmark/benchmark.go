@@ -89,7 +89,7 @@ func main() {
 	flag.StringVar(&cdrPort, "cp", "1234", "Coordinator port")
 	flag.IntVar(&writePercentage, "write", 50, "Percentage of write operations (0-100)")
 	flag.IntVar(&readPercentage, "read", 50, "Percentage of read operations (0-100)")
-	flag.IntVar(&numOperations, "n", 1000, "Total number of operations to perform")
+	flag.IntVar(&numOperations, "n", 500, "Total number of operations to perform")
 	flag.IntVar(&numConcurrent, "c", 1, "Number of concurrent clients")
 	flag.IntVar(&thinkTimeMs, "think", 0, "Think time between operations in milliseconds")
 	flag.IntVar(&timeoutMs, "timeout", 5000, "Operation timeout in milliseconds")
