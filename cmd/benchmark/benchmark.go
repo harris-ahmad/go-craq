@@ -79,28 +79,21 @@ type Stats struct {
 func main() {
 	// Basic connection parameters
 	var cdrHost, cdrPort string
+	var writePercentage, readPercentage int
+	var numOperations, numConcurrent int
+	var thinkTimeMs, timeoutMs, durationSec int
+	var keyPrefix string
+	var keyRange, valueSize int
+	
 	flag.StringVar(&cdrHost, "ch", "localhost", "Coordinator hostname")
 	flag.StringVar(&cdrPort, "cp", "1234", "Coordinator port")
-	
-	// Workload configuration
-	var writePercentage, readPercentage int
 	flag.IntVar(&writePercentage, "write", 50, "Percentage of write operations (0-100)")
 	flag.IntVar(&readPercentage, "read", 50, "Percentage of read operations (0-100)")
-	
-	// Concurrency parameters
-	var numOperations, numConcurrent int
 	flag.IntVar(&numOperations, "n", 1000, "Total number of operations to perform")
 	flag.IntVar(&numConcurrent, "c", 1, "Number of concurrent clients")
-	
-	// Timing parameters
-	var thinkTimeMs, timeoutMs, durationSec int
 	flag.IntVar(&thinkTimeMs, "think", 0, "Think time between operations in milliseconds")
 	flag.IntVar(&timeoutMs, "timeout", 5000, "Operation timeout in milliseconds")
 	flag.IntVar(&durationSec, "duration", 0, "Run for specified seconds instead of fixed operations count (0 = use -n)")
-	
-	// Data parameters
-	var keyPrefix string
-	var keyRange, valueSize int
 	flag.StringVar(&keyPrefix, "key-prefix", "key", "Prefix for generated keys")
 	flag.IntVar(&keyRange, "key-range", 1000, "Range of keys to use")
 	flag.IntVar(&valueSize, "value-size", 100, "Size of values in bytes")
